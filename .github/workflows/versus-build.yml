@@ -6,9 +6,6 @@ on:
     branches:
       - main
 
-permissions:
-  contents: write
-
 jobs:
   build:
     strategy:
@@ -17,9 +14,11 @@ jobs:
         config:
           - name: Windows
             os: windows-latest
+
           - name: Android32
             os: ubuntu-latest
             target: Android32
+
           - name: Android64
             os: ubuntu-latest
             target: Android64
@@ -28,17 +27,45 @@ jobs:
     runs-on: ${{ matrix.config.os }}
 
     steps:
-      - uses: actions/checkout@v7
+      - name: Checkout repository
+        uses: actions/checkout@v7
 
       - name: Unpack Versus source
         shell: bash
         run: |
           rm -rf _versus_src
           mkdir -p _versus_src
-          python -m zipfile -e Versus-Geode-v0.1.0-build-ready.zip _versus_src
-          cp -R _versus_src/Versus-Geode-v0.1.0/. .
 
-      - name: Build the mod
+          python -c "import zipfile; zipfile.ZipFile('Versus-Geode-v0.1.0-build-ready.zip').extractall('_versus_src')"
+
+          echo "Extracted files:"
+          find _versus_src -maxdepth 2 -type f -print
+
+          ROOT="$(find _versus_src -mindepth 1 -maxdepth 1 -type d -print -quit)"
+
+          if [ -z "$ROOT" ]; then
+            echo "Could not find the Versus source folder."
+            exit 1
+          fi
+
+          echo "Source root: $ROOT"
+
+          cp -R "$ROOT"/. .
+
+          echo "Project root:"
+          ls -la
+
+          if [ ! -f "mod.json" ]; then
+            echo "mod.json was not found."
+            exit 1
+          fi
+
+          if [ ! -f "CMakeLists.txt" ]; then
+            echo "CMakeLists.txt was not found."
+            exit 1
+          fi
+
+      - name: Build Versus
         uses: geode-sdk/build-geode-mod@main
         with:
           combine: true
@@ -47,29 +74,16 @@ jobs:
   package:
     name: Package Windows + Android
     runs-on: ubuntu-latest
-    needs: [build]
+    needs:
+      - build
 
     steps:
-      - uses: geode-sdk/build-geode-mod/combine@main
+      - name: Combine builds
+        uses: geode-sdk/build-geode-mod/combine@main
         id: build
 
-      - uses: actions/upload-artifact@v7
+      - name: Upload Versus .geode
+        uses: actions/upload-artifact@v7
         with:
           name: Versus-Geode
           path: ${{ steps.build.outputs.build-output }}
-
-      - name: Publish test release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          OUTPUT="${{ steps.build.outputs.build-output }}"
-          FILE=$(find "$OUTPUT" -type f -name '*.geode' | head -n 1)
-          if [ -z "$FILE" ]; then
-            echo "No .geode file was produced"
-            exit 1
-          fi
-          gh release delete v0.1.0-build --yes --cleanup-tag || true
-          gh release create v0.1.0-build "$FILE#k2qr.versus.geode" \
-            --title "Versus v0.1.0 Build" \
-            --notes "Automatic Windows + Android test build."
