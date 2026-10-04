@@ -14,11 +14,9 @@ jobs:
         config:
           - name: Windows
             os: windows-latest
-
           - name: Android32
             os: ubuntu-latest
             target: Android32
-
           - name: Android64
             os: ubuntu-latest
             target: Android64
@@ -33,9 +31,62 @@ jobs:
       - name: Unpack Versus source
         shell: bash
         run: |
-          rm -rf _versus_src
-          mkdir -p _versus_src
+          python - <<'PY'
+          import glob
+          import os
+          import shutil
+          import zipfile
 
-          ZIPFILE="$(find . -maxdepth 1 -type f -name 'Versus-Geode-v0.1.0-build-ready*.zip' -print | sort | tail -n 1)"
+          files = sorted(glob.glob("Versus-Geode-v0.1.0-build-ready*.zip"))
+          assert files, "Versus ZIP not found"
 
-          if [
+          zip_path = files[-1]
+          print("Using:", zip_path)
+
+          shutil.rmtree("_versus_src", ignore_errors=True)
+          os.makedirs("_versus_src", exist_ok=True)
+
+          with zipfile.ZipFile(zip_path) as z:
+              z.extractall("_versus_src")
+
+          mods = glob.glob("_versus_src/**/mod.json", recursive=True)
+          assert mods, "mod.json not found"
+
+          root = os.path.dirname(mods[0])
+          print("Project root:", root)
+
+          for item in os.listdir(root):
+              src = os.path.join(root, item)
+              dst = os.path.join(".", item)
+
+              if os.path.isdir(src):
+                  shutil.copytree(src, dst, dirs_exist_ok=True)
+              else:
+                  shutil.copy2(src, dst)
+
+          assert os.path.isfile("mod.json")
+          assert os.path.isfile("CMakeLists.txt")
+          PY
+
+      - name: Build Versus
+        uses: geode-sdk/build-geode-mod@main
+        with:
+          combine: true
+          target: ${{ matrix.config.target }}
+
+  package:
+    name: Package Windows + Android
+    runs-on: ubuntu-latest
+    needs:
+      - build
+
+    steps:
+      - name: Combine builds
+        uses: geode-sdk/build-geode-mod/combine@main
+        id: build
+
+      - name: Upload Versus
+        uses: actions/upload-artifact@v7
+        with:
+          name: Versus-Geode
+          path: ${{ steps.build.outputs.build-output }}
