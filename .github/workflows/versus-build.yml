@@ -38,30 +38,33 @@ jobs:
 
           python -c "import zipfile; zipfile.ZipFile('Versus-Geode-v0.1.0-build-ready.zip').extractall('_versus_src')"
 
-          echo "Extracted files:"
-          find _versus_src -maxdepth 2 -type f -print
+          echo "Searching for mod.json..."
 
-          ROOT="$(find _versus_src -mindepth 1 -maxdepth 1 -type d -print -quit)"
+          MODFILE="$(find _versus_src -type f -name 'mod.json' -print -quit)"
 
-          if [ -z "$ROOT" ]; then
-            echo "Could not find the Versus source folder."
+          if [ -z "$MODFILE" ]; then
+            echo "ERROR: mod.json was not found."
+            find _versus_src -maxdepth 5 -print
             exit 1
           fi
 
-          echo "Source root: $ROOT"
+          ROOT="$(dirname "$MODFILE")"
+
+          echo "Versus project found at:"
+          echo "$ROOT"
 
           cp -R "$ROOT"/. .
 
-          echo "Project root:"
+          echo "Project files:"
           ls -la
 
           if [ ! -f "mod.json" ]; then
-            echo "mod.json was not found."
+            echo "ERROR: mod.json was not copied."
             exit 1
           fi
 
           if [ ! -f "CMakeLists.txt" ]; then
-            echo "CMakeLists.txt was not found."
+            echo "ERROR: CMakeLists.txt was not copied."
             exit 1
           fi
 
@@ -78,11 +81,11 @@ jobs:
       - build
 
     steps:
-      - name: Combine builds
+      - name: Combine Windows and Android builds
         uses: geode-sdk/build-geode-mod/combine@main
         id: build
 
-      - name: Upload Versus .geode
+      - name: Upload final Versus mod
         uses: actions/upload-artifact@v7
         with:
           name: Versus-Geode
