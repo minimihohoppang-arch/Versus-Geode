@@ -1,0 +1,93 @@
+name: Build Versus Geode 2
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - name: Windows
+            os: windows-latest
+          - name: Android32
+            os: ubuntu-latest
+            target: Android32
+          - name: Android64
+            os: ubuntu-latest
+            target: Android64
+
+    name: ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Unpack Versus source
+        shell: bash
+        run: |
+          rm -rf _versus_src
+          mkdir -p _versus_src
+
+          ZIPFILE="$(find . -maxdepth 1 -type f -name 'Versus-Geode-v0.1.0-build-ready*.zip' -print | sort | tail -n 1)"
+
+          if [ -z "$ZIPFILE" ]; then
+            echo "ERROR: Versus build ZIP was not found."
+            ls -la
+            exit 1
+          fi
+
+          echo "Using ZIP: $ZIPFILE"
+
+          python -c "import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall('_versus_src')" "$ZIPFILE"
+
+          MODFILE="$(find _versus_src -type f -name 'mod.json' -print -quit)"
+
+          if [ -z "$MODFILE" ]; then
+            echo "ERROR: mod.json was not found."
+            find _versus_src -maxdepth 5 -print
+            exit 1
+          fi
+
+          ROOT="$(dirname "$MODFILE")"
+
+          echo "Versus project found at: $ROOT"
+          cp -R "$ROOT"/. .
+
+          if [ ! -f "mod.json" ]; then
+            echo "ERROR: mod.json was not copied."
+            exit 1
+          fi
+
+          if [ ! -f "CMakeLists.txt" ]; then
+            echo "ERROR: CMakeLists.txt was not copied."
+            exit 1
+          fi
+
+      - name: Build Versus
+        uses: geode-sdk/build-geode-mod@main
+        with:
+          combine: true
+          target: ${{ matrix.config.target }}
+
+  package:
+    name: Package Windows + Android
+    runs-on: ubuntu-latest
+    needs:
+      - build
+
+    steps:
+      - name: Combine Windows and Android builds
+        uses: geode-sdk/build-geode-mod/combine@main
+        id: build
+
+      - name: Upload final Versus mod
+        uses: actions/upload-artifact@v7
+        with:
+          name: Versus-Geode
+          path: ${{ steps.build.outputs.build-output }}
