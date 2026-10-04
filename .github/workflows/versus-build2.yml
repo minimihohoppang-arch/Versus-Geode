@@ -1,0 +1,41 @@
+name: Build Versus Geode 2
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - name: Windows
+            os: windows-latest
+
+          - name: Android32
+            os: ubuntu-latest
+            target: Android32
+
+          - name: Android64
+            os: ubuntu-latest
+            target: Android64
+
+    name: ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Unpack Versus source
+        shell: bash
+        run: |
+          rm -rf _versus_src
+          mkdir -p _versus_src
+
+          ZIPFILE="$(find . -maxdepth 1 -type f -name 'Versus-Geode-v0.1.0-build-ready*.zip' -print | sort | tail -n 1)"
+
+          if [
